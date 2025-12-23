@@ -1,0 +1,35 @@
+server:
+  port: 9092
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: OMESH.S
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    consumer:
+      group-id: shadow-ledger
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: com.shadowledger.shadow_ledger_service.dto.EventDto
+        spring.json.use.type.headers: false # <- important
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics

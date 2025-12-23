@@ -1,0 +1,337 @@
+openapi: 3.0.3
+info:
+  title: Shadow Ledger System API
+  description: Banking backend system for processing financial events and maintaining shadow ledger
+  version: 1.0.0
+  contact:
+    name: Shadow Ledger Team
+
+servers:
+  - url: http://localhost:8080
+    description: API Gateway
+  - url: http://localhost:8081
+    description: Event Service (Direct)
+  - url: http://localhost:8082
+    description: Shadow Ledger Service (Direct)
+  - url: http://localhost:8083
+    description: Drift Correction Service (Direct)
+
+tags:
+  - name: Authentication
+    description: JWT token management
+  - name: Events
+    description: Financial event processing
+  - name: Shadow Ledger
+    description: Shadow balance queries
+  - name: Drift Correction
+    description: Balance reconciliation
+
+paths:
+  /auth/token:
+    post:
+      tags:
+        - Authentication
+      summary: Generate JWT token
+      description: Create a JWT token for authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: testuser
+                role:
+                  type: string
+                  enum: [USER, AUDITOR, ADMIN]
+                  example: USER
+      responses:
+        '200':
+          description: Token generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  role:
+                    type: string
+
+  /events:
+    post:
+      tags:
+        - Events
+      summary: Submit financial event
+      description: Create a new debit or credit transaction
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+            examples:
+              credit:
+                summary: Credit transaction
+                value:
+                  eventId: E1001
+                  accountId: A10
+                  type: credit
+                  amount: 500
+                  timestamp: 1735561800000
+              debit:
+                summary: Debit transaction
+                value:
+                  eventId: E1002
+                  accountId: A10
+                  type: debit
+                  amount: 50
+                  timestamp: 1735561900000
+      responses:
+        '202':
+          description: Event accepted for processing
+        '400':
+          description: Invalid event data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Duplicate eventId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /accounts/{accountId}/shadow-balance:
+    get:
+      tags:
+        - Shadow Ledger
+      summary: Get shadow balance
+      description: Retrieve current shadow balance for an account
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: A10
+      responses:
+        '200':
+          description: Shadow balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShadowBalance'
+              example:
+                accountId: A10
+                balance: 750.0
+                lastEvent: E1003
+
+  /drift-check:
+    post:
+      tags:
+        - Drift Correction
+      summary: Check for balance drift
+      description: Compare CBS balances with shadow ledger
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CbsBalance'
+            example:
+              - accountId: A10
+                reportedBalance: 800
+              - accountId: A11
+                reportedBalance: 1500
+      responses:
+        '200':
+          description: Drift check completed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CorrectionEvent'
+              example:
+                - eventId: CORR-A10-12345
+                  accountId: A10
+                  type: credit
+                  amount: 50
+
+  /correct/{accountId}:
+    post:
+      tags:
+        - Drift Correction
+      summary: Manual correction
+      description: Create manual correction event
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: A10
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [credit, debit]
+          example: credit
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+          example: 100
+      responses:
+        '200':
+          description: Correction event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectionEvent'
+
+  /actuator/health:
+    get:
+      tags:
+        - Monitoring
+      summary: Health check
+      description: Check service health status
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+
+  /actuator/metrics:
+    get:
+      tags:
+        - Monitoring
+      summary: Get metrics
+      description: Retrieve service metrics
+      responses:
+        '200':
+          description: Metrics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Event:
+      type: object
+      required:
+        - eventId
+        - accountId
+        - type
+        - amount
+        - timestamp
+      properties:
+        eventId:
+          type: string
+          description: Unique event identifier
+          example: E1001
+        accountId:
+          type: string
+          description: Account identifier
+          example: A10
+        type:
+          type: string
+          enum: [credit, debit]
+          description: Transaction type
+          example: credit
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Transaction amount (must be positive)
+          example: 500
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+          example: 1735561800000
+
+    ShadowBalance:
+      type: object
+      properties:
+        accountId:
+          type: string
+          example: A10
+        balance:
+          type: number
+          format: double
+          example: 750.0
+        lastEvent:
+          type: string
+          nullable: true
+          example: E1003
+
+    CbsBalance:
+      type: object
+      required:
+        - accountId
+        - reportedBalance
+      properties:
+        accountId:
+          type: string
+          example: A10
+        reportedBalance:
+          type: number
+          format: double
+          example: 800
+
+    CorrectionEvent:
+      type: object
+      properties:
+        eventId:
+          type: string
+          example: CORR-A10-12345
+        accountId:
+          type: string
+          example: A10
+        type:
+          type: string
+          enum: [credit, debit]
+          example: credit
+        amount:
+          type: number
+          format: double
+          example: 50
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+

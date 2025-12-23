@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: event-service
+          uri: http://localhost:9091
+          predicates:
+            - Path=/events/**
+
+        - id: shadow-ledger-service
+          uri: http://localhost:9092
+          predicates:
+            - Path=/accounts/**
+
+        - id: drift-correction-service
+          uri: http://localhost:9093
+          predicates:
+            - Path=/drift-check/**
+            - Path=/correct/**

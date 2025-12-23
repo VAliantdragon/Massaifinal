@@ -1,0 +1,37 @@
+server:
+  port: 9093
+
+spring:
+  application:
+    name: drift-correction-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: OMESH.S
+    password: your_actual_password # Verify this password is correct for the OMESH.S user
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none  # READ ONLY
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        show_sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092 # Changed from kafka:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+    template:
+      default-topic: transactions.corrections
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
